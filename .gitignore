@@ -80,3 +80,4 @@ smoketest_db_dump
 
 /.gitrev
 __debug*
+config.bat
