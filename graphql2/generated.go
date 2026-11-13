@@ -331,6 +331,7 @@ type ComplexityRoot struct {
 		DelayMinutes     func(childComplexity int) int
 		EscalationPolicy func(childComplexity int) int
 		ID               func(childComplexity int) int
+		MultiAck         func(childComplexity int) int
 		StepNumber       func(childComplexity int) int
 		Targets          func(childComplexity int) int
 	}
@@ -849,6 +850,7 @@ type ComplexityRoot struct {
 		LastVerifyMessageState func(childComplexity int) int
 		Name                   func(childComplexity int) int
 		Pending                func(childComplexity int) int
+		Private                func(childComplexity int) int
 		StatusUpdates          func(childComplexity int) int
 		Type                   func(childComplexity int) int
 		Value                  func(childComplexity int) int
@@ -2082,6 +2084,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.EscalationPolicyStep.ID(childComplexity), true
+	case "EscalationPolicyStep.multiAck":
+		if e.ComplexityRoot.EscalationPolicyStep.MultiAck == nil {
+			break
+		}
+
+		return e.ComplexityRoot.EscalationPolicyStep.MultiAck(childComplexity), true
 	case "EscalationPolicyStep.stepNumber":
 		if e.ComplexityRoot.EscalationPolicyStep.StepNumber == nil {
 			break
@@ -4774,6 +4782,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.UserContactMethod.Pending(childComplexity), true
+	case "UserContactMethod.private":
+		if e.ComplexityRoot.UserContactMethod.Private == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UserContactMethod.Private(childComplexity), true
 	case "UserContactMethod.statusUpdates":
 		if e.ComplexityRoot.UserContactMethod.StatusUpdates == nil {
 			break
@@ -5565,6 +5579,8 @@ func (ec *executionContext) childFields_EscalationPolicyStep(ctx context.Context
 		return ec.fieldContext_EscalationPolicyStep_escalationPolicy(ctx, field)
 	case "actions":
 		return ec.fieldContext_EscalationPolicyStep_actions(ctx, field)
+	case "multiAck":
+		return ec.fieldContext_EscalationPolicyStep_multiAck(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type EscalationPolicyStep", field.Name)
 }
@@ -6375,6 +6391,8 @@ func (ec *executionContext) childFields_UserContactMethod(ctx context.Context, f
 		return ec.fieldContext_UserContactMethod_lastVerifyMessageState(ctx, field)
 	case "statusUpdates":
 		return ec.fieldContext_UserContactMethod_statusUpdates(ctx, field)
+	case "private":
+		return ec.fieldContext_UserContactMethod_private(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type UserContactMethod", field.Name)
 }
@@ -11835,6 +11853,29 @@ func (ec *executionContext) fieldContext_EscalationPolicyStep_actions(_ context.
 		},
 	}
 	return fc, nil
+}
+
+func (ec *executionContext) _EscalationPolicyStep_multiAck(ctx context.Context, field graphql.CollectedField, obj *escalation.Step) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_EscalationPolicyStep_multiAck(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.MultiAck, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_EscalationPolicyStep_multiAck(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("EscalationPolicyStep", field, false, false, errors.New("field of type Boolean does not have child fields"))
 }
 
 func (ec *executionContext) _Expr_exprToCondition(ctx context.Context, field graphql.CollectedField, obj *Expr) (ret graphql.Marshaler) {
@@ -23043,6 +23084,29 @@ func (ec *executionContext) fieldContext_UserContactMethod_statusUpdates(_ conte
 	return graphql.NewScalarFieldContext("UserContactMethod", field, true, true, errors.New("field of type StatusUpdateState does not have child fields"))
 }
 
+func (ec *executionContext) _UserContactMethod_private(ctx context.Context, field graphql.CollectedField, obj *contactmethod.ContactMethod) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UserContactMethod_private(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Private, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_UserContactMethod_private(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("UserContactMethod", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
 func (ec *executionContext) _UserNotificationRule_id(ctx context.Context, field graphql.CollectedField, obj *notificationrule.NotificationRule) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -25429,7 +25493,7 @@ func (ec *executionContext) unmarshalInputCreateEscalationPolicyStepInput(ctx co
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"escalationPolicyID", "delayMinutes", "targets", "newRotation", "newSchedule", "actions"}
+	fieldsInOrder := [...]string{"escalationPolicyID", "delayMinutes", "targets", "newRotation", "newSchedule", "actions", "multiAck"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -25480,6 +25544,13 @@ func (ec *executionContext) unmarshalInputCreateEscalationPolicyStepInput(ctx co
 				return it, err
 			}
 			it.Actions = data
+		case "multiAck":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("multiAck"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.MultiAck = data
 		}
 	}
 	return it, nil
@@ -25966,7 +26037,7 @@ func (ec *executionContext) unmarshalInputCreateUserContactMethodInput(ctx conte
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"userID", "type", "dest", "name", "value", "newUserNotificationRule", "enableStatusUpdates"}
+	fieldsInOrder := [...]string{"userID", "type", "dest", "name", "value", "newUserNotificationRule", "enableStatusUpdates", "private"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -26022,6 +26093,13 @@ func (ec *executionContext) unmarshalInputCreateUserContactMethodInput(ctx conte
 				return it, err
 			}
 			it.EnableStatusUpdates = data
+		case "private":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("private"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Private = data
 		}
 	}
 	return it, nil
@@ -27178,7 +27256,7 @@ func (ec *executionContext) unmarshalInputRotationSearchOptions(ctx context.Cont
 		asMap["favoritesFirst"] = false
 	}
 
-	fieldsInOrder := [...]string{"first", "after", "search", "omit", "favoritesOnly", "favoritesFirst"}
+	fieldsInOrder := [...]string{"first", "after", "search", "omit", "only", "favoritesOnly", "favoritesFirst"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -27213,6 +27291,13 @@ func (ec *executionContext) unmarshalInputRotationSearchOptions(ctx context.Cont
 				return it, err
 			}
 			it.Omit = data
+		case "only":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("only"))
+			data, err := ec.unmarshalOID2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Only = data
 		case "favoritesOnly":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("favoritesOnly"))
 			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
@@ -27310,7 +27395,7 @@ func (ec *executionContext) unmarshalInputScheduleSearchOptions(ctx context.Cont
 		asMap["favoritesFirst"] = false
 	}
 
-	fieldsInOrder := [...]string{"first", "after", "search", "omit", "favoritesOnly", "favoritesFirst"}
+	fieldsInOrder := [...]string{"first", "after", "search", "omit", "only", "favoritesOnly", "favoritesFirst"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -27345,6 +27430,13 @@ func (ec *executionContext) unmarshalInputScheduleSearchOptions(ctx context.Cont
 				return it, err
 			}
 			it.Omit = data
+		case "only":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("only"))
+			data, err := ec.unmarshalOID2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Only = data
 		case "favoritesOnly":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("favoritesOnly"))
 			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
@@ -28373,7 +28465,7 @@ func (ec *executionContext) unmarshalInputUpdateEscalationPolicyStepInput(ctx co
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"id", "delayMinutes", "targets", "actions"}
+	fieldsInOrder := [...]string{"id", "delayMinutes", "targets", "actions", "multiAck"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -28410,6 +28502,13 @@ func (ec *executionContext) unmarshalInputUpdateEscalationPolicyStepInput(ctx co
 				return it, err
 			}
 			it.Actions = data
+		case "multiAck":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("multiAck"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.MultiAck = data
 		}
 	}
 	return it, nil
@@ -28853,7 +28952,7 @@ func (ec *executionContext) unmarshalInputUpdateUserContactMethodInput(ctx conte
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"id", "name", "value", "enableStatusUpdates"}
+	fieldsInOrder := [...]string{"id", "name", "value", "enableStatusUpdates", "private"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -28888,6 +28987,13 @@ func (ec *executionContext) unmarshalInputUpdateUserContactMethodInput(ctx conte
 				return it, err
 			}
 			it.EnableStatusUpdates = data
+		case "private":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("private"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Private = data
 		}
 	}
 	return it, nil
@@ -29132,7 +29238,7 @@ func (ec *executionContext) unmarshalInputUserSearchOptions(ctx context.Context,
 		asMap["favoritesFirst"] = false
 	}
 
-	fieldsInOrder := [...]string{"first", "after", "search", "omit", "CMValue", "CMType", "dest", "favoritesOnly", "favoritesFirst"}
+	fieldsInOrder := [...]string{"first", "after", "search", "omit", "only", "CMValue", "CMType", "dest", "favoritesOnly", "favoritesFirst"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -29167,6 +29273,13 @@ func (ec *executionContext) unmarshalInputUserSearchOptions(ctx context.Context,
 				return it, err
 			}
 			it.Omit = data
+		case "only":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("only"))
+			data, err := ec.unmarshalOID2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Only = data
 		case "CMValue":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("CMValue"))
 			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
@@ -31865,6 +31978,11 @@ func (ec *executionContext) _EscalationPolicyStep(ctx context.Context, sel ast.S
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "multiAck":
+			out.Values[i] = ec._EscalationPolicyStep_multiAck(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -38535,6 +38653,11 @@ func (ec *executionContext) _UserContactMethod(ctx context.Context, sel ast.Sele
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "private":
+			out.Values[i] = ec._UserContactMethod_private(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
