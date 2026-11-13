@@ -251,6 +251,7 @@ export interface CreateEscalationPolicyStepInput {
   actions?: null | DestinationInput[]
   delayMinutes: number
   escalationPolicyID?: null | string
+  multiAck?: null | boolean
   newRotation?: null | CreateRotationInput
   newSchedule?: null | CreateScheduleInput
   targets?: null | TargetInput[]
@@ -325,6 +326,7 @@ export interface CreateUserContactMethodInput {
   enableStatusUpdates?: null | boolean
   name: string
   newUserNotificationRule?: null | CreateUserNotificationRuleInput
+  private?: null | boolean
   type?: null | ContactMethodType
   userID: string
   value?: null | string
@@ -528,6 +530,7 @@ export interface EscalationPolicyStep {
   delayMinutes: number
   escalationPolicy?: null | EscalationPolicy
   id: string
+  multiAck: boolean
   stepNumber: number
   targets: Target[]
 }
@@ -968,6 +971,7 @@ export interface RotationSearchOptions {
   favoritesOnly?: null | boolean
   first?: null | number
   omit?: null | string[]
+  only?: null | string[]
   search?: null | string
 }
 
@@ -1052,6 +1056,7 @@ export interface ScheduleSearchOptions {
   favoritesOnly?: null | boolean
   first?: null | number
   omit?: null | string[]
+  only?: null | string[]
   search?: null | string
 }
 
@@ -1333,6 +1338,7 @@ export interface UpdateEscalationPolicyStepInput {
   actions?: null | DestinationInput[]
   delayMinutes?: null | number
   id: string
+  multiAck?: null | boolean
   targets?: null | TargetInput[]
 }
 
@@ -1399,6 +1405,7 @@ export interface UpdateUserContactMethodInput {
   enableStatusUpdates?: null | boolean
   id: string
   name?: null | string
+  private?: null | boolean
   value?: null | string
 }
 
@@ -1462,6 +1469,7 @@ export interface UserContactMethod {
   lastVerifyMessageState?: null | NotificationState
   name: string
   pending: boolean
+  private: boolean
   statusUpdates: StatusUpdateState
   type?: null | ContactMethodType
   value: string
@@ -1513,6 +1521,7 @@ export interface UserSearchOptions {
   favoritesOnly?: null | boolean
   first?: null | number
   omit?: null | string[]
+  only?: null | string[]
   search?: null | string
 }
 
@@ -1692,5 +1701,6 @@ type ConfigID =
   | 'SMTP.Password'
   | 'Webhook.Enable'
   | 'Webhook.AllowedURLs'
+  | 'Webhook.BlockPrivateAddresses'
   | 'Feedback.Enable'
   | 'Feedback.OverrideURL'

@@ -151,7 +151,7 @@ func (v *Voice) ServeCall(w http.ResponseWriter, req *http.Request) {
 func (v *Voice) MessageStatus(ctx context.Context, externalID string) (*notification.Status, error) {
 	call, err := v.c.GetVoice(ctx, externalID)
 	if err != nil {
-		return nil, err
+		return nil, wrapStatusErr(err)
 	}
 	return call.messageStatus(), nil
 }
@@ -186,7 +186,7 @@ func (v *Voice) SendMessage(ctx context.Context, msg notification.Message) (*not
 	})
 
 	opts := &VoiceOptions{
-		ValidityPeriod: time.Second * 10,
+		ValidityPeriod: time.Second * 30,
 	}
 
 	if err := opts.setMsgParams(msg); err != nil {
