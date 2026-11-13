@@ -13,7 +13,6 @@ import (
 	"github.com/target/goalert/gadb"
 	"github.com/target/goalert/permission"
 	"github.com/target/goalert/schedule"
-	"github.com/target/goalert/schedule/rule"
 	"github.com/target/goalert/util"
 	"github.com/target/goalert/util/log"
 	"github.com/target/goalert/util/sqlutil"
@@ -31,64 +30,15 @@ func (db *DB) UpdateAll(ctx context.Context) error {
 }
 
 func ruleRowIsActive(row gadb.SchedMgrRulesRow, t time.Time) bool {
-	var wf timeutil.WeekdayFilter
-	if row.Sunday {
-		wf[0] = 1
-	}
-	if row.Monday {
-		wf[1] = 1
-	}
-	if row.Tuesday {
-		wf[2] = 1
-	}
-	if row.Wednesday {
-		wf[3] = 1
-	}
-	if row.Thursday {
-		wf[4] = 1
-	}
-	if row.Friday {
-		wf[5] = 1
-	}
-	if row.Saturday {
-		wf[6] = 1
-	}
-	return rule.Rule{
-		Start:         row.StartTime,
-		End:           row.EndTime,
-		WeekdayFilter: wf,
-	}.IsActive(t)
+	return ruleFromRow(row).IsActive(t)
 }
 
 func (db *DB) update(ctx context.Context) error {
-	tx, state, err := db.lock.BeginTxWithState(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
+	tx, err := db.lock.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
 	if err != nil {
 		return errors.Wrap(err, "start transaction")
 	}
 	defer sqlutil.Rollback(ctx, "schedule manager", tx)
-
-	var s State
-	err = state.Load(ctx, &s)
-	if err != nil {
-		return errors.Wrap(err, "load state")
-	}
-
-	if !s.HasMigratedScheduleData {
-		isDone, err := db.migrateScheduleDataNotifDedup(ctx, tx)
-		if err != nil {
-			return errors.Wrap(err, "migrate schedule data")
-		}
-		if !isDone {
-			// We're not done yet, so we'll try again later.
-			return tx.Commit()
-		}
-
-		s.HasMigratedScheduleData = true
-		err = state.Save(ctx, &s)
-		if err != nil {
-			return errors.Wrap(err, "save state")
-		}
-	}
 
 	log.Debugf(ctx, "Updating schedule rules.")
 
@@ -155,6 +105,27 @@ func (db *DB) update(ctx context.Context) error {
 		getInfo(row.ID).TimeZone, err = util.LoadLocation(row.TimeZone)
 		if err != nil {
 			return fmt.Errorf("load TZ info '%s' for schedule '%s': %w", row.TimeZone, row.ID, err)
+		}
+	}
+
+	// Temporary schedule shifts are stored as JSON, so they may reference users that have since been deleted.
+	tempUsers := mapset.NewThreadUnsafeSet[uuid.UUID]()
+	for _, info := range updateData {
+		if isActive, users := info.ScheduleData.TempOnCall(now); isActive {
+			tempUsers.Append(users...)
+		}
+	}
+	if tempUsers.Cardinality() > 0 {
+		validUsers, err := q.SchedMgrVerifyUsers(ctx, tempUsers.ToSlice())
+		if err != nil {
+			return errors.Wrap(err, "verify temporary schedule users")
+		}
+		missing := tempUsers.Clone()
+		missing.RemoveAll(validUsers...)
+		if missing.Cardinality() > 0 {
+			for _, info := range updateData {
+				info.MissingUsers = missing
+			}
 		}
 	}
 
@@ -252,9 +223,7 @@ func nextOnCallNotification(nowInZone time.Time, rule schedule.OnCallNotificatio
 		newTime := rule.Time.FirstOfDay(nowInZone)
 		if !newTime.After(nowInZone) {
 			// add a day
-			y, m, d := nowInZone.Date()
-			nowInZone = time.Date(y, m, d+1, 0, 0, 0, 0, nowInZone.Location())
-			newTime = rule.Time.FirstOfDay(nowInZone)
+			newTime = rule.Time.FirstOfDay(timeutil.AddDays(nowInZone, 1))
 		}
 
 		return &newTime

@@ -13,11 +13,13 @@ import (
 	"github.com/target/goalert/heartbeat"
 	"github.com/target/goalert/notification"
 	"github.com/target/goalert/notificationchannel"
+	"github.com/target/goalert/permission"
 	"github.com/target/goalert/schedule"
 	"github.com/target/goalert/schedule/rotation"
 	"github.com/target/goalert/service"
 	"github.com/target/goalert/user"
 	"github.com/target/goalert/user/contactmethod"
+	"github.com/target/goalert/user/notificationrule"
 	"github.com/target/goalert/util/sqlutil"
 
 	"github.com/pkg/errors"
@@ -46,6 +48,8 @@ type loaders struct {
 	AlertMetadata             *dataloader.Loader[int, alert.MetadataAlertID]
 	AlertsByStatus            *dataloader.AggFetcher[uuid.UUID, gadb.ServiceAlertCountsRow]
 	AlertStats                *dataloader.AggFetcherParam[uuid.UUID, AlertStatsParam, gadb.ServiceAlertStatsRow]
+	CMsByUser                 *dataloader.AggFetcher[string, contactmethod.ContactMethod]
+	NRsByUser                 *dataloader.AggFetcher[string, notificationrule.NotificationRule]
 }
 
 type AlertStatsParam struct {
@@ -86,6 +90,12 @@ func (a *App) registerLoaders(ctx context.Context) context.Context {
 				ServiceIds: ids,
 			})
 		}, func(r gadb.ServiceAlertStatsRow) uuid.UUID { return r.ServiceID }),
+
+		CMsByUser: dataloader.NewStoreLoaderAgg(ctx, func(ctx context.Context, userIDs []string) ([]contactmethod.ContactMethod, error) {
+			return a.CMStore.FindAllByUserIDs(ctx, a.DB, userIDs)
+		}, func(cm contactmethod.ContactMethod) string { return cm.UserID }),
+
+		NRsByUser: dataloader.NewStoreLoaderAgg(ctx, a.NRStore.FindAllByUserIDs, func(nr notificationrule.NotificationRule) string { return nr.UserID }),
 	})
 	return ctx
 }
@@ -156,6 +166,12 @@ func (a *App) closeLoaders(ctx context.Context) {
 	}
 	if loader.AlertStats != nil {
 		loader.AlertStats.Close()
+	}
+	if loader.CMsByUser != nil {
+		loader.CMsByUser.Close()
+	}
+	if loader.NRsByUser != nil {
+		loader.NRsByUser.Close()
 	}
 }
 
@@ -273,13 +289,67 @@ func (app *App) FindOneAlertMetric(ctx context.Context, id int) (*alertmetrics.M
 }
 
 // FindOneCM will return a single contact method for the given id, using the contexts dataloader if enabled.
-func (app *App) FindOneCM(ctx context.Context, id uuid.UUID) (*contactmethod.ContactMethod, error) {
+func (app *App) FindOneCM(ctx context.Context, id uuid.UUID) (cm *contactmethod.ContactMethod, err error) {
 	loader := loadersFrom(ctx).CM
 	if loader == nil {
-		return app.CMStore.FindOne(ctx, app.DB, id)
+		cm, err = app.CMStore.FindOne(ctx, app.DB, id)
+	} else {
+		cm, err = loader.FetchOne(ctx, id.String())
+	}
+	if err != nil {
+		return nil, err
+	}
+	if cm == nil {
+		return nil, nil
+	}
+	if cm.Private && cm.UserID != permission.UserID(ctx) {
+		return nil, nil
 	}
 
-	return loader.FetchOne(ctx, id.String())
+	return cm, nil
+}
+
+// FindManyCMsForUser will return all contact methods for the given user ID, using the context's
+// dataloader if enabled, filtering out private contact methods not owned by the requester.
+func (app *App) FindManyCMsForUser(ctx context.Context, userID string) ([]contactmethod.ContactMethod, error) {
+	loader := loadersFrom(ctx).CMsByUser
+	var cms []contactmethod.ContactMethod
+	var err error
+	if loader == nil {
+		cms, err = app.CMStore.FindAllByUserIDs(ctx, app.DB, []string{userID})
+	} else {
+		cms, err = loader.FetchAggregate(ctx, userID)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return filterVisibleContactMethods(ctx, cms), nil
+}
+
+// filterVisibleContactMethods removes private contact methods not owned by the requesting
+// user, matching the same rule FindOneCM applies to a single contact method.
+func filterVisibleContactMethods(ctx context.Context, cms []contactmethod.ContactMethod) []contactmethod.ContactMethod {
+	authID := permission.UserID(ctx)
+	result := make([]contactmethod.ContactMethod, 0, len(cms))
+	for _, cm := range cms {
+		if cm.Private && cm.UserID != authID {
+			continue
+		}
+		result = append(result, cm)
+	}
+	return result
+}
+
+// FindManyNRsForUser will return all notification rules for the given user ID, using the
+// context's dataloader if enabled.
+func (app *App) FindManyNRsForUser(ctx context.Context, userID string) ([]notificationrule.NotificationRule, error) {
+	loader := loadersFrom(ctx).NRsByUser
+	if loader == nil {
+		return app.NRStore.FindAllByUserIDs(ctx, []string{userID})
+	}
+
+	return loader.FetchAggregate(ctx, userID)
 }
 
 // FindOneNC will return a single notification channel for the given id, using the contexts dataloader if enabled.

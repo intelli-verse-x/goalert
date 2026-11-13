@@ -219,6 +219,7 @@ type CreateEscalationPolicyStepInput struct {
 	NewRotation        *CreateRotationInput   `json:"newRotation,omitempty"`
 	NewSchedule        *CreateScheduleInput   `json:"newSchedule,omitempty"`
 	Actions            []gadb.DestV1          `json:"actions,omitempty"`
+	MultiAck           *bool                  `json:"multiAck,omitempty"`
 }
 
 type CreateGQLAPIKeyInput struct {
@@ -302,6 +303,8 @@ type CreateUserContactMethodInput struct {
 	//
 	// Note: Some contact method types, like Slack, will always receive status updates and this value is ignored.
 	EnableStatusUpdates *bool `json:"enableStatusUpdates,omitempty"`
+	// If true, this contact method will be private and only visible to the user.
+	Private *bool `json:"private,omitempty"`
 }
 
 type CreateUserInput struct {
@@ -616,6 +619,7 @@ type RotationSearchOptions struct {
 	After  *string  `json:"after,omitempty"`
 	Search *string  `json:"search,omitempty"`
 	Omit   []string `json:"omit,omitempty"`
+	Only   []string `json:"only,omitempty"`
 	// Include only favorited rotations in the results.
 	FavoritesOnly *bool `json:"favoritesOnly,omitempty"`
 	// Sort favorite rotations first.
@@ -667,6 +671,7 @@ type ScheduleSearchOptions struct {
 	After  *string  `json:"after,omitempty"`
 	Search *string  `json:"search,omitempty"`
 	Omit   []string `json:"omit,omitempty"`
+	Only   []string `json:"only,omitempty"`
 	// Include only favorited services in the results.
 	FavoritesOnly *bool `json:"favoritesOnly,omitempty"`
 	// Sort favorite services first.
@@ -856,6 +861,7 @@ type UpdateEscalationPolicyStepInput struct {
 	DelayMinutes *int                   `json:"delayMinutes,omitempty"`
 	Targets      []assignment.RawTarget `json:"targets,omitempty"`
 	Actions      []gadb.DestV1          `json:"actions,omitempty"`
+	MultiAck     *bool                  `json:"multiAck,omitempty"`
 }
 
 type UpdateGQLAPIKeyInput struct {
@@ -935,6 +941,8 @@ type UpdateUserContactMethodInput struct {
 	//
 	// Note: Some contact method types, like Slack, will always receive status updates and this value is ignored.
 	EnableStatusUpdates *bool `json:"enableStatusUpdates,omitempty"`
+	// If true, this contact method will be private and only visible to the user.
+	Private *bool `json:"private,omitempty"`
 }
 
 type UpdateUserInput struct {
@@ -986,6 +994,7 @@ type UserSearchOptions struct {
 	After   *string            `json:"after,omitempty"`
 	Search  *string            `json:"search,omitempty"`
 	Omit    []string           `json:"omit,omitempty"`
+	Only    []string           `json:"only,omitempty"`
 	CMValue *string            `json:"CMValue,omitempty"`
 	CMType  *ContactMethodType `json:"CMType,omitempty"`
 	Dest    *gadb.DestV1       `json:"dest,omitempty"`

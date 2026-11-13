@@ -519,6 +519,27 @@ func (q *Queries) Alert_AlertHasEPState(ctx context.Context, alertID int64) (boo
 	return has_ep_state, err
 }
 
+const alert_AlertMultiAck = `-- name: Alert_AlertMultiAck :one
+SELECT
+    EXISTS (
+        SELECT
+            1
+        FROM
+            escalation_policy_state state
+            JOIN escalation_policy_steps step ON step.id = state.escalation_policy_step_id
+        WHERE
+            state.alert_id = $1
+            AND step.multi_ack) AS multi_ack
+`
+
+// Returns true if the alert's current escalation policy step has multi-ack enabled.
+func (q *Queries) Alert_AlertMultiAck(ctx context.Context, alertID int64) (bool, error) {
+	row := q.db.QueryRowContext(ctx, alert_AlertMultiAck, alertID)
+	var multi_ack bool
+	err := row.Scan(&multi_ack)
+	return multi_ack, err
+}
+
 const alert_GetAlertFeedback = `-- name: Alert_GetAlertFeedback :many
 SELECT
     alert_id,
@@ -1342,7 +1363,8 @@ AND NOT EXISTS (
         alert_logs log
     WHERE
         timestamp > now() - '1 day'::interval * $2
-        AND log.alert_id = a.id)
+        AND log.alert_id = a.id
+        AND log.event != 'policy_updated')
 LIMIT 100
 `
 
@@ -1352,6 +1374,7 @@ type CleanupMgrFindStaleAlertsParams struct {
 }
 
 // CleanupMgrFindStaleAlerts will find alerts that are triggered or active and have no activity in specified number of days.
+// Policy updates are not considered activity, since they are not caused by anything happening on the alert itself.
 func (q *Queries) CleanupMgrFindStaleAlerts(ctx context.Context, arg CleanupMgrFindStaleAlertsParams) ([]int64, error) {
 	rows, err := q.db.QueryContext(ctx, cleanupMgrFindStaleAlerts, arg.IncludeAcked, arg.AutoCloseThresholdDays)
 	if err != nil {
@@ -1712,8 +1735,8 @@ func (q *Queries) ConnectionInfo(ctx context.Context) ([]ConnectionInfoRow, erro
 }
 
 const contactMethodAdd = `-- name: ContactMethodAdd :exec
-INSERT INTO user_contact_methods(id, name, dest, disabled, user_id, enable_status_updates)
-    VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO user_contact_methods(id, name, dest, disabled, user_id, enable_status_updates, private)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
 `
 
 type ContactMethodAddParams struct {
@@ -1723,6 +1746,7 @@ type ContactMethodAddParams struct {
 	Disabled            bool
 	UserID              uuid.UUID
 	EnableStatusUpdates bool
+	Private             bool
 }
 
 func (q *Queries) ContactMethodAdd(ctx context.Context, arg ContactMethodAddParams) error {
@@ -1733,6 +1757,7 @@ func (q *Queries) ContactMethodAdd(ctx context.Context, arg ContactMethodAddPara
 		arg.Disabled,
 		arg.UserID,
 		arg.EnableStatusUpdates,
+		arg.Private,
 	)
 	return err
 }
@@ -1762,7 +1787,7 @@ func (q *Queries) ContactMethodEnableDisable(ctx context.Context, arg ContactMet
 
 const contactMethodFindAll = `-- name: ContactMethodFindAll :many
 SELECT
-    dest, disabled, enable_status_updates, id, last_test_verify_at, metadata, name, pending, type, user_id, value
+    dest, disabled, enable_status_updates, id, last_test_verify_at, metadata, name, pending, private, type, user_id, value
 FROM
     user_contact_methods
 WHERE
@@ -1787,6 +1812,52 @@ func (q *Queries) ContactMethodFindAll(ctx context.Context, userID uuid.UUID) ([
 			&i.Metadata,
 			&i.Name,
 			&i.Pending,
+			&i.Private,
+			&i.Type,
+			&i.UserID,
+			&i.Value,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const contactMethodFindAllByUserIDs = `-- name: ContactMethodFindAllByUserIDs :many
+SELECT
+    dest, disabled, enable_status_updates, id, last_test_verify_at, metadata, name, pending, private, type, user_id, value
+FROM
+    user_contact_methods
+WHERE
+    user_id = ANY ($1::uuid[])
+`
+
+func (q *Queries) ContactMethodFindAllByUserIDs(ctx context.Context, dollar_1 []uuid.UUID) ([]UserContactMethod, error) {
+	rows, err := q.db.QueryContext(ctx, contactMethodFindAllByUserIDs, pq.Array(dollar_1))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UserContactMethod
+	for rows.Next() {
+		var i UserContactMethod
+		if err := rows.Scan(
+			&i.Dest,
+			&i.Disabled,
+			&i.EnableStatusUpdates,
+			&i.ID,
+			&i.LastTestVerifyAt,
+			&i.Metadata,
+			&i.Name,
+			&i.Pending,
+			&i.Private,
 			&i.Type,
 			&i.UserID,
 			&i.Value,
@@ -1806,7 +1877,7 @@ func (q *Queries) ContactMethodFindAll(ctx context.Context, userID uuid.UUID) ([
 
 const contactMethodFindMany = `-- name: ContactMethodFindMany :many
 SELECT
-    dest, disabled, enable_status_updates, id, last_test_verify_at, metadata, name, pending, type, user_id, value
+    dest, disabled, enable_status_updates, id, last_test_verify_at, metadata, name, pending, private, type, user_id, value
 FROM
     user_contact_methods
 WHERE
@@ -1831,6 +1902,7 @@ func (q *Queries) ContactMethodFindMany(ctx context.Context, dollar_1 []uuid.UUI
 			&i.Metadata,
 			&i.Name,
 			&i.Pending,
+			&i.Private,
 			&i.Type,
 			&i.UserID,
 			&i.Value,
@@ -1850,7 +1922,7 @@ func (q *Queries) ContactMethodFindMany(ctx context.Context, dollar_1 []uuid.UUI
 
 const contactMethodFindOneUpdate = `-- name: ContactMethodFindOneUpdate :one
 SELECT
-    dest, disabled, enable_status_updates, id, last_test_verify_at, metadata, name, pending, type, user_id, value
+    dest, disabled, enable_status_updates, id, last_test_verify_at, metadata, name, pending, private, type, user_id, value
 FROM
     user_contact_methods
 WHERE
@@ -1870,6 +1942,7 @@ func (q *Queries) ContactMethodFindOneUpdate(ctx context.Context, id uuid.UUID) 
 		&i.Metadata,
 		&i.Name,
 		&i.Pending,
+		&i.Private,
 		&i.Type,
 		&i.UserID,
 		&i.Value,
@@ -1879,7 +1952,7 @@ func (q *Queries) ContactMethodFindOneUpdate(ctx context.Context, id uuid.UUID) 
 
 const contactMethodFineOne = `-- name: ContactMethodFineOne :one
 SELECT
-    dest, disabled, enable_status_updates, id, last_test_verify_at, metadata, name, pending, type, user_id, value
+    dest, disabled, enable_status_updates, id, last_test_verify_at, metadata, name, pending, private, type, user_id, value
 FROM
     user_contact_methods
 WHERE
@@ -1898,6 +1971,7 @@ func (q *Queries) ContactMethodFineOne(ctx context.Context, id uuid.UUID) (UserC
 		&i.Metadata,
 		&i.Name,
 		&i.Pending,
+		&i.Private,
 		&i.Type,
 		&i.UserID,
 		&i.Value,
@@ -1965,7 +2039,8 @@ UPDATE
 SET
     name = $2,
     disabled = $3,
-    enable_status_updates = $4
+    enable_status_updates = $4,
+    private = $5
 WHERE
     id = $1
 `
@@ -1975,6 +2050,7 @@ type ContactMethodUpdateParams struct {
 	Name                string
 	Disabled            bool
 	EnableStatusUpdates bool
+	Private             bool
 }
 
 func (q *Queries) ContactMethodUpdate(ctx context.Context, arg ContactMethodUpdateParams) error {
@@ -1983,6 +2059,7 @@ func (q *Queries) ContactMethodUpdate(ctx context.Context, arg ContactMethodUpda
 		arg.Name,
 		arg.Disabled,
 		arg.EnableStatusUpdates,
+		arg.Private,
 	)
 	return err
 }
@@ -4996,37 +5073,6 @@ func (q *Queries) SchedMgrDataForUpdate(ctx context.Context) ([]SchedMgrDataForU
 	return items, nil
 }
 
-const schedMgrDataIDs = `-- name: SchedMgrDataIDs :many
-SELECT
-    schedule_id
-FROM
-    schedule_data
-`
-
-// Returns all schedule IDs that have an entry in the schedule_data table.
-func (q *Queries) SchedMgrDataIDs(ctx context.Context) ([]uuid.UUID, error) {
-	rows, err := q.db.QueryContext(ctx, schedMgrDataIDs)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var schedule_id uuid.UUID
-		if err := rows.Scan(&schedule_id); err != nil {
-			return nil, err
-		}
-		items = append(items, schedule_id)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const schedMgrEndOnCall = `-- name: SchedMgrEndOnCall :exec
 UPDATE
     schedule_on_call_users
@@ -5048,23 +5094,6 @@ func (q *Queries) SchedMgrEndOnCall(ctx context.Context, arg SchedMgrEndOnCallPa
 	return err
 }
 
-const schedMgrGetData = `-- name: SchedMgrGetData :one
-SELECT
-    data
-FROM
-    schedule_data
-WHERE
-    schedule_id = $1
-`
-
-// Returns the data for a single schedule.
-func (q *Queries) SchedMgrGetData(ctx context.Context, scheduleID uuid.UUID) (json.RawMessage, error) {
-	row := q.db.QueryRowContext(ctx, schedMgrGetData, scheduleID)
-	var data json.RawMessage
-	err := row.Scan(&data)
-	return data, err
-}
-
 const schedMgrInsertMessage = `-- name: SchedMgrInsertMessage :exec
 INSERT INTO outgoing_messages(id, message_type, channel_id, schedule_id)
     VALUES ($1, 'schedule_on_call_notification', $2, $3)
@@ -5079,43 +5108,6 @@ type SchedMgrInsertMessageParams struct {
 func (q *Queries) SchedMgrInsertMessage(ctx context.Context, arg SchedMgrInsertMessageParams) error {
 	_, err := q.db.ExecContext(ctx, schedMgrInsertMessage, arg.ID, arg.ChannelID, arg.ScheduleID)
 	return err
-}
-
-const schedMgrNCDedupMapping = `-- name: SchedMgrNCDedupMapping :many
-SELECT
-    old_id,
-    new_id
-FROM
-    notification_channel_duplicates
-`
-
-type SchedMgrNCDedupMappingRow struct {
-	OldID uuid.UUID
-	NewID uuid.UUID
-}
-
-// Returns the mapping of old notification channel IDs to new notification channel IDs.
-func (q *Queries) SchedMgrNCDedupMapping(ctx context.Context) ([]SchedMgrNCDedupMappingRow, error) {
-	rows, err := q.db.QueryContext(ctx, schedMgrNCDedupMapping)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []SchedMgrNCDedupMappingRow
-	for rows.Next() {
-		var i SchedMgrNCDedupMappingRow
-		if err := rows.Scan(&i.OldID, &i.NewID); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const schedMgrOnCall = `-- name: SchedMgrOnCall :many
@@ -5287,26 +5279,6 @@ func (q *Queries) SchedMgrSetData(ctx context.Context, arg SchedMgrSetDataParams
 	return err
 }
 
-const schedMgrSetDataV1Rules = `-- name: SchedMgrSetDataV1Rules :exec
-UPDATE
-    schedule_data
-SET
-    data = jsonb_set(data, '{V1,OnCallNotificationRules}', $2)
-WHERE
-    schedule_id = $1
-`
-
-type SchedMgrSetDataV1RulesParams struct {
-	ScheduleID  uuid.UUID
-	Replacement json.RawMessage
-}
-
-// Sets the .V1.OnCallNotificationRules for a schedule.
-func (q *Queries) SchedMgrSetDataV1Rules(ctx context.Context, arg SchedMgrSetDataV1RulesParams) error {
-	_, err := q.db.ExecContext(ctx, schedMgrSetDataV1Rules, arg.ScheduleID, arg.Replacement)
-	return err
-}
-
 const schedMgrStartOnCall = `-- name: SchedMgrStartOnCall :exec
 INSERT INTO schedule_on_call_users(schedule_id, start_time, user_id)
 SELECT
@@ -5355,6 +5327,39 @@ func (q *Queries) SchedMgrTimezones(ctx context.Context) ([]SchedMgrTimezonesRow
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const schedMgrVerifyUsers = `-- name: SchedMgrVerifyUsers :many
+SELECT
+    id
+FROM
+    users
+WHERE
+    id = ANY ($1::uuid[])
+`
+
+// Returns the subset of the given user IDs that exist in the users table.
+func (q *Queries) SchedMgrVerifyUsers(ctx context.Context, userIds []uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.QueryContext(ctx, schedMgrVerifyUsers, pq.Array(userIds))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -5782,7 +5787,6 @@ FROM
 WHERE
     sub.id = $1
 FOR UPDATE
-    SKIP LOCKED
 `
 
 type StatusMgrFindOneRow struct {

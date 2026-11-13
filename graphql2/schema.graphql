@@ -860,6 +860,7 @@ input RotationSearchOptions {
   after: String = ""
   search: String = ""
   omit: [ID!]
+  only: [ID!]
 
   """
   Include only favorited rotations in the results.
@@ -908,6 +909,7 @@ input ScheduleSearchOptions {
   after: String = ""
   search: String = ""
   omit: [ID!]
+  only: [ID!]
 
   """
   Include only favorited services in the results.
@@ -943,6 +945,7 @@ input UserSearchOptions {
   after: String = ""
   search: String = ""
   omit: [ID!]
+  only: [ID!]
   CMValue: String = ""
   CMType: ContactMethodType
   dest: DestinationInput
@@ -1422,6 +1425,7 @@ type UserContactMethod {
   lastVerifyMessageState: NotificationState
 
   statusUpdates: StatusUpdateState!
+  private: Boolean!
 }
 
 enum StatusUpdateState {
@@ -1453,6 +1457,11 @@ input CreateUserContactMethodInput {
   Note: Some contact method types, like Slack, will always receive status updates and this value is ignored.
   """
   enableStatusUpdates: Boolean
+
+  """
+  If true, this contact method will be private and only visible to the user.
+  """
+  private: Boolean
 }
 
 input CreateUserNotificationRuleInput {
@@ -1475,6 +1484,11 @@ input UpdateUserContactMethodInput {
   Note: Some contact method types, like Slack, will always receive status updates and this value is ignored.
   """
   enableStatusUpdates: Boolean
+
+  """
+  If true, this contact method will be private and only visible to the user.
+  """
+  private: Boolean
 }
 
 input SendContactMethodVerificationInput {
