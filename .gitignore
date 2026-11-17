@@ -56,7 +56,6 @@ _testmain.go
 .idea
 *.iml
 *.ipr
-.vscode
 debug
 
 # glide
@@ -80,3 +79,4 @@ smoketest_db_dump
 
 /.gitrev
 __debug*
+config.bat
